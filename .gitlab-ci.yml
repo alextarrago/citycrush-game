@@ -1,0 +1,32 @@
+stages:
+  - build
+  - deploy
+
+build_main:
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:v1.6.0-debug
+    entrypoint: ['']
+  environment:
+    name: $CI_COMMIT_REF_NAME
+  only:
+    - main
+  script:
+    - echo "$GOOGLE_JSON_KEY" > $GOOGLE_APPLICATION_CREDENTIALS
+    - /kaniko/executor --context $CI_PROJECT_DIR --target production --dockerfile $CI_PROJECT_DIR/Dockerfile --destination eu.gcr.io/cityxerpa-b57e7/cx-hiring-game:$CI_COMMIT_SHORT_SHA-$CI_COMMIT_REF_NAME --build-arg GOOGLE_SA=$GOOGLE_APPLICATION_CREDENTIALS
+
+deploy_main:
+  stage: deploy
+  image: xbassols/deploy-ci:latest
+  needs: [build_main]
+  environment:
+    name: $CI_COMMIT_REF_NAME
+  only:
+    - main
+  script:
+    - echo "$GOOGLE_JSON_KEY" > service_account.json
+    - gcloud auth activate-service-account --key-file=service_account.json
+    - gcloud container clusters get-credentials ew1-cluster --zone europe-west1-b --project cityxerpa-b57e7
+    - cd kubernetes/deploy
+    - npm install
+    - node deploy.js --env $CI_COMMIT_REF_NAME
